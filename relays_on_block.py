@@ -3,10 +3,11 @@ import RPi.GPIO as gpio
 import datetime
 
 on = 9
-off = 18
+off = 21
 
-pins = (22, 23)
+pins = (16, 22, 23)
 lights = 17
+
 
 gpio.setwarnings(False)
 gpio.setmode(gpio.BCM)
@@ -19,10 +20,10 @@ for x in pins:
 while True:
 	now = datetime.datetime.now()
 	if now.hour >= on and now.hour < off:
-		gpio.output(lights, 0)
-	else:
 		gpio.output(lights, 1)
+	else:
+		gpio.output(lights, 0)
 
 	for x in pins:
-		gpio.output(x, 0)
+		gpio.output(x, 1)
 
