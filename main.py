@@ -1,6 +1,7 @@
 ##!/usr/bin/python3
 import RPi.GPIO as gpio
-from smbus2 import SMBusWrapper
+#from smbus2 import SMBusWrapper
+from smbus import SMBus
 from datetime import datetime
 import time
 import os
@@ -29,8 +30,10 @@ def getCPUtemperature()->float:
     res = os.popen('vcgencmd measure_temp').readline()
     return(float(res.replace("temp=","").replace("'C\n","")))
 
+bus = SMBus(1)
+
 def update_register():
-    with SMBusWrapper(1) as bus:
+#    with SMBusWrapper(1) as bus:
         if register.changed:
             bus.write_i2c_block_data(address_nano, 0, register.get())
             register.changed = False

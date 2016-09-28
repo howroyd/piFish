@@ -6,21 +6,21 @@ class PithonI2cRegistry (object):
             self._reg.append()
         self._size = size
 
-    def set(self, new_data):
-        if self._reg != new_data:
-            self._reg = new_data
-            self.changed = True
+    def set(self, new_data, reg=None):
+        if reg != None:
+            if self._reg_[reg] != new_data:
+                self._reg[reg] = new_data
+                self.changed = True
+        else:
+            if self._reg != new_data:
+                self._reg = new_data
+                self.changed = True
 
-    def set(self, value, reg):
-        if self._reg_[reg] != value:
-            self._reg[reg] = value
-            self.changed = True
-
-    def get(self):
-        return self._reg
-
-    def get(self, reg):
-        return self._reg[reg]
+    def get(self, reg=None):
+        if reg != None:
+            return self._reg[reg]
+        else:
+            return self._reg
 
     def size(self):
         return self._size
