@@ -1,93 +1,86 @@
 ##!/usr/bin/python3
 import RPi.GPIO as gpio
-import smbus
-import datetime
+from smbus2 import SMBusWrapper
+from datetime import datetime
 import time
 import os
-from enum import Enum
-
-bus = smbus.SMBus(1)
+import pithon_i2c_registry
+import sys
 
 address_nano = 0x69
+
+register = pithon_i2c_registry.PithonI2cRegistry(8)
 
 time_lights_on = 9
 time_lights_off = 21
 
 class reg(Enum):
-    red = 1
-    green = 2
-    blue = 3
-    fan = 4
-    filter = 5
-    lights = 6
-    heater = 7
-    air = 8
+    red = 0
+    green = 1
+    blue = 2
+    fan = 3
+    filter = 4
+    lights = 5
+    heater = 6
+    air = 7
 
 # Return CPU temperature as a character string                                      
-def getCPUtemperature():
+def getCPUtemperature()->float:
     res = os.popen('vcgencmd measure_temp').readline()
     return(float(res.replace("temp=","").replace("'C\n","")))
 
-time_fan_on = time.time()
+def update_register():
+    with SMBusWrapper(1) as bus:
+        if register.changed:
+            bus.write_i2c_block_data(address_nano, 0, register.get())
+            register.changed = False
+        else:
+            register.set(bus.read_i2c_block_data(address_nano, 0, 8))
+
+time_fan_on = 0
+time_fan_off = time.time()
 
 gpio.setwarnings(False)
 gpio.setmode(gpio.BCM)
 
-#bus.write_byte_data(address_nano, 1, 255)  # Red
-#bus.write_byte_data(address_nano, 2, 255)  # Green
-#bus.write_byte_data(address_nano, 3, 255)  # Blue
-#bus.write_byte_data(address_nano, 4, 255)  # Fan
-#bus.write_byte_data(address_nano, 5, True) # Filter
-#bus.write_byte_data(address_nano, 6, False) # Lights
-#bus.write_byte_data(address_nano, 7, True) # Heater
-#bus.write_byte_data(address_nano, 8, True) # Air
+time.sleep(1)
 
-#time.sleep(5)
-
-#bus.write_byte_data(address_nano, reg['red'].value, 255)  # Red
-#bus.write_byte_data(address_nano, reg['green'].value, 255)  # Green
-#bus.write_byte_data(address_nano, reg['blue'].value, 255)  # Blue
-#bus.write_byte_data(address_nano, reg['fan'].value, 255)  # Fan
-#bus.write_byte_data(address_nano, reg['filter'].value, True) # Filter
-#bus.write_byte_data(address_nano, reg['lights'].value, True) # Lights
-#bus.write_byte_data(address_nano, reg['heater'].value, False) # Heater
-#bus.write_byte_data(address_nano, reg['air'].value, True) # Air
-
-test = [10,255,255,255,1,0,1,1]
+# Blocker
+while True:
+    update_register()
+    print("Register:", register.get())
+    query = input("Continue? [y/n]  ")
+    if query.lowercase() == "y":
+        break
+    elif query.lowercase() == "n":
+        sys.exit()
+    else:
+        continue
 
 while True:
-	try:
-		now = datetime.datetime.now()
+    try:
+        now = datetime.now()
 
-		data = bus.read_i2c_block_data(address_nano, 0)[0:9]
+        if now.hour >= time_lights_on and now.hour < time_lights_off:
+            register.set(False, reg.lights)
+        else:
+            register.set(True, reg.lights)
 
-		if now.hour >= time_lights_on and now.hour < time_lights_off:
-			test[5] = True
-			#bus.write_byte_data(address_nano, 6, True) # Lights
-		else:
-			test[5] = False
-			#bus.write_byte_data(address_nano, 6, False) # Lights
+        temp = getCPUtemperature()
+        print(temp, "degC")
 
-#		bus.write_byte_data(address_nano, 5, True) # Filter
-#		bus.write_byte_data(address_nano, 7, True) # Heater
-#		bus.write_byte_data(address_nano, 8, True) # Air
+        if (getCPUtemperature() > 50.0 and register.get(reg.fan) != 255 and time.time()-time_fan_off > 10):
+            time_fan_on = time.time()
+            register.set(255, reg.fan)
+        elif (getCPUtemperature() < 50.0 and register.get(reg.fan) == 255 and time.time()-time_fan_on > 10):
+            time_fan_off = time.time()
+            register.set(0, reg.fan)
+        else:
+            pass
 
-		time.sleep(1)
-		if data != test:
-			print("New data")
-			for i in test:
-				bus.write_byte(address_nano,i)
+        print(register.get())
 
+        update_register()
 
-		temp = getCPUtemperature()
-		print(temp, "degC")
-#		if (getCPUtemperature() > 50.0):
-#			time_fan_on = time.time()
-#			bus.write_byte_data(address_nano, reg['fan'].value, 255)  # Fan
-#		elif (time.time() > 30):
-#			bus.write_byte_data(address_nano, reg['fan'].value, 0)  # Fan
-
-		print(data)
-			
-	except IOError:
-		pass
+    except IOError:
+        pass

@@ -21,13 +21,8 @@
     <PtvsTargetsFile>$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets</PtvsTargetsFile>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="arduino_led.py" />
-    <Compile Include="hue.py" />
-    <Compile Include="lights_switch.py" />
     <Compile Include="main.py" />
-    <Compile Include="piFish.py" />
-    <Compile Include="pwm.py" />
-    <Compile Include="relays_on_block.py" />
+    <Compile Include="pithon_i2c_registry.py" />
   </ItemGroup>
   <Import Project="$(PtvsTargetsFile)" Condition="Exists($(PtvsTargetsFile))" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" Condition="!Exists($(PtvsTargetsFile))" />
