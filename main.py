@@ -7,6 +7,7 @@ import time
 import os
 import pithon_i2c_registry
 import sys
+from enum import Enum
 
 address_nano = 0x69
 
@@ -35,10 +36,14 @@ bus = SMBus(1)
 def update_register():
 #    with SMBusWrapper(1) as bus:
         if register.changed:
-            bus.write_i2c_block_data(address_nano, 0, register.get())
+            data = register.get()
+            bus.write_i2c_block_data(address_nano, 0x00, [0xff] + data)
             register.changed = False
-        else:
-            register.set(bus.read_i2c_block_data(address_nano, 0, 8))
+            print("Sent:", data) 
+        time.sleep(0.1)
+        data = bus.read_i2c_block_data(address_nano, 0, 8)
+#        register.set(data)
+        print("Received:", data) 
 
 time_fan_on = 0
 time_fan_off = time.time()
@@ -50,12 +55,14 @@ time.sleep(1)
 
 # Blocker
 while True:
+    default_data = [0,0,0,255,1,0,1,1]
+    register.set(default_data)
     update_register()
-    print("Register:", register.get())
+#    print("Initial register:", register.get())
     query = input("Continue? [y/n]  ")
-    if query.lowercase() == "y":
+    if query.lower() == "y":
         break
-    elif query.lowercase() == "n":
+    elif query.lower() == "n":
         sys.exit()
     else:
         continue
@@ -65,25 +72,27 @@ while True:
         now = datetime.now()
 
         if now.hour >= time_lights_on and now.hour < time_lights_off:
-            register.set(False, reg.lights)
+            register.set(1, reg.lights.value)
         else:
-            register.set(True, reg.lights)
+            register.set(0, reg.lights.value)
 
         temp = getCPUtemperature()
         print(temp, "degC")
 
-        if (getCPUtemperature() > 50.0 and register.get(reg.fan) != 255 and time.time()-time_fan_off > 10):
+        if (getCPUtemperature() > 50.0 and register.get(reg.fan.value) != 255 and time.time()-time_fan_off > 10):
             time_fan_on = time.time()
-            register.set(255, reg.fan)
-        elif (getCPUtemperature() < 50.0 and register.get(reg.fan) == 255 and time.time()-time_fan_on > 10):
+            register.set(255, reg.fan.value)
+        elif (getCPUtemperature() < 50.0 and register.get(reg.fan.value) == 255 and time.time()-time_fan_on > 10):
             time_fan_off = time.time()
-            register.set(0, reg.fan)
+            register.set(0, reg.fan.value)
         else:
             pass
 
         print(register.get())
 
         update_register()
+
+        time.sleep(2)
 
     except IOError:
         pass

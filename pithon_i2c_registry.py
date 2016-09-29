@@ -2,23 +2,24 @@ class PithonI2cRegistry (object):
     def __init__(self, size):
         self._reg = list()
         self.changed = False
-        for x in size:
-            self._reg.append()
+        for x in range(size):
+            self._reg.append(0)
         self._size = size
 
-    def set(self, new_data, reg=None):
-        if reg != None:
-            if self._reg_[reg] != new_data:
-                self._reg[reg] = new_data
+    def set(self, new_data, ptr=None):
+       self.changed = True 
+       if ptr != None:
+            if self._reg[ptr] != new_data:
+                self._reg[ptr] = new_data
                 self.changed = True
-        else:
+       else:
             if self._reg != new_data:
                 self._reg = new_data
                 self.changed = True
 
-    def get(self, reg=None):
-        if reg != None:
-            return self._reg[reg]
+    def get(self, ptr=None):
+        if ptr != None:
+            return self._reg[ptr]
         else:
             return self._reg
 
