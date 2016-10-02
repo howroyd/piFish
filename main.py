@@ -10,6 +10,7 @@ import sys
 from enum import Enum
 
 address_nano = 0x69
+pin_gpio_arduino_reset = 25
 
 register = pithon_i2c_registry.PithonI2cRegistry(8)
 
@@ -22,8 +23,8 @@ class reg(Enum):
     blue = 2
     fan = 3
     filter = 4
-    lights = 5
-    heater = 6
+    lights = 6
+    heater = 5
     air = 7
 
 # Return CPU temperature as a character string                                      
@@ -36,14 +37,18 @@ bus = SMBus(1)
 def update_register():
 #    with SMBusWrapper(1) as bus:
         if register.changed:
-            data = register.get()
-            bus.write_i2c_block_data(address_nano, 0x00, [0xff] + data)
-            register.changed = False
-            print("Sent:", data) 
-        time.sleep(0.1)
-        data = bus.read_i2c_block_data(address_nano, 0, 8)
+            data_out = register.get()
+            bus.write_i2c_block_data(address_nano, 0x00, [0xff] + data_out)
+            print("Sent:", data_out) 
+            time.sleep(0.1)
+            data_in = bus.read_i2c_block_data(address_nano, 0, 8)
 #        register.set(data)
-        print("Received:", data) 
+            print("Received:", data_in) 
+            if (data_out == data_in): 
+                register.changed = False
+                print("Ok!")
+            else:
+                print("Set register on Arduino failed!")
 
 time_fan_on = 0
 time_fan_off = time.time()
@@ -51,21 +56,27 @@ time_fan_off = time.time()
 gpio.setwarnings(False)
 gpio.setmode(gpio.BCM)
 
+gpio.setup(pin_gpio_arduino_reset, gpio.OUT, initial=gpio.LOW)
+
 time.sleep(1)
 
+default_data = [50,50,50,255,1,1,0,1]
+register.set(default_data)
+update_register()
+
+time_last = time.time()
+
 # Blocker
-while True:
-    default_data = [0,0,0,255,1,0,1,1]
-    register.set(default_data)
-    update_register()
+#while True:
+#    update_register()
 #    print("Initial register:", register.get())
-    query = input("Continue? [y/n]  ")
-    if query.lower() == "y":
-        break
-    elif query.lower() == "n":
-        sys.exit()
-    else:
-        continue
+#    query = input("Continue? [y/n]  ")
+#    if query.lower() == "y":
+#        break
+#    elif query.lower() == "n":
+#        sys.exit()
+#    else:
+#        continue
 
 while True:
     try:
@@ -88,7 +99,9 @@ while True:
         else:
             pass
 
-        print(register.get())
+        if (time.time() - time_last > 10):
+            time_last = time.time()
+            print(register.get())
 
         update_register()
 

@@ -7,7 +7,7 @@ class PithonI2cRegistry (object):
         self._size = size
 
     def set(self, new_data, ptr=None):
-       self.changed = True 
+#       self.changed = True 
        if ptr != None:
             if self._reg[ptr] != new_data:
                 self._reg[ptr] = new_data
