@@ -1,4 +1,5 @@
-###!/usr/bin/python3
+#!/usr/bin/python3
+
 import RPi.GPIO as gpio
 import smbus
 from datetime import datetime
@@ -7,28 +8,31 @@ import os
 import pithon_i2c_registry
 import sys
 from enum import Enum
-from w1thermsensor.w1thermsensor import W1ThermSensor
+from w1thermsensor import W1ThermSensor
 import socket
 
 address_nano = 0x69
-pin_gpio_arduino_reset = 25 # TODO
-pin_gpio_arduino_interrupt = 24 # TODO
-pin_gpio_switch_lid = 0 # TODO
+pin_gpio_arduino_reset = 20
+pin_gpio_arduino_interrupt = 21
+pin_gpio_switch_lid = 16
 
 time_lights_on = 9
 time_lights_off = 21
 time_leds_on = 21
 time_leds_off = 23
 
+gpio.setwarnings(False)
+gpio.setmode(gpio.BCM)
+
 class pin_arduino(Enum):
     red = 0
     green = 1
     blue = 2
-    fan = 7
-    filter = 3
-    lights = 4
-    heater = 5
-    air = 6
+    fan = 3
+    pump = 4
+    lights = 5
+    heater = 6
+    air = 7
     status = 8
 
 flag_lid_open = False
@@ -95,10 +99,18 @@ def update_register():
 #    with SMBus(1) as bus:
         if register.changed:
             data_out = register.get()
-            bus.write_i2c_block_data(address_nano, 0xff, data_out)
+            for x in range(7):
+#            bus.write_i2c_block_data(address_nano, 0xff, data_out)
+                out = [data_out[x] , data_out[8]]
+                bus.write_i2c_block_data(address_nano, x, out)
+                time.sleep(0.1)
             print("Sent:", data_out) 
             time.sleep(0.1)
-            data_in = bus.read_i2c_block_data(address_nano, 0, 8)[:8]
+            data_in = [None] * 9
+            for x in range(9):
+#            data_in = bus.read_i2c_block_data(address_nano, 0, 9)[:9]
+                data_in[x] = bus.read_byte_data(address_nano, x)
+                time.sleep(0.1)
             #data_in = dev.read(8)
 #        register.set(data)
             #dev.close()
@@ -111,23 +123,21 @@ def update_register():
 
 # Lid switch interrupt callbacks
 def lid_open(channel):  
-    flag_lid_open = True
-def lid_closed(channel):  
-    flag_lid_open = False 
+    if gpio.input(pin_gpio_switch_lid):
+        flag_lid_open = True
+    else:
+        flag_lid_open = False
 
-gpio.setwarnings(False)
-gpio.setmode(gpio.BCM)
 
 gpio.setup(pin_gpio_arduino_reset, gpio.OUT, initial=gpio.HIGH) # Pulse LOW for > 700ns to reset arduino
 gpio.setup(pin_gpio_arduino_interrupt, gpio.OUT, initial=gpio.HIGH) # Heartbeat watchdog
 gpio.setup(pin_gpio_switch_lid, gpio.IN, pull_up_down=gpio.PUD_UP) # Lid switch
-gpio.add_event_detect(pin_gpio_switch_lid, gpio.FALLING, callback=lid_open, bouncetime=300)
-gpio.add_event_detect(pin_gpio_switch_lid, gpio.RISING, callback=lid_closed, bouncetime=300)
+gpio.add_event_detect(pin_gpio_switch_lid, gpio.BOTH, callback=lid_open, bouncetime=300)
 
 #time.sleep(1) #TODO needed?
 
 bus = smbus.SMBus(1)
-temp_sensor = W1ThermSensor()
+#temp_sensor = W1ThermSensor()
 fan_controller = FanController()
 heartbeat = Heartbeat()
 
@@ -135,36 +145,40 @@ heartbeat = Heartbeat()
 UDP_IP = "127.0.0.1"
 UDP_PORT = 9000
 UDP_KEY = "385D23B0"
-sock = socket.socket(socket.AF_INET, # Internet
-                     socket.SOCK_DGRAM) # UDP
+#sock = socket.socket(socket.AF_INET, # Internet
+#                     socket.SOCK_DGRAM) # UDP
 # Set some options to make it multicast-friendly
-sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-try:
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-except AttributeError:
-    pass # Some systems don't support SO_REUSEPORT
-sock.setsockopt(socket.SOL_IP, socket.IP_MULTICAST_TTL, 20)
-sock.setsockopt(socket.SOL_IP, socket.IP_MULTICAST_LOOP, 1)
+#sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+#try:
+#    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+#except AttributeError:
+#    pass # Some systems don't support SO_REUSEPORT
+#sock.setsockopt(socket.SOL_IP, socket.IP_MULTICAST_TTL, 20)
+#sock.setsockopt(socket.SOL_IP, socket.IP_MULTICAST_LOOP, 1)
 # Bind to the port
-sock.bind(('', UDP_PORT))
+#sock.bind(('', UDP_PORT))
 # Set some more multicast options
-intf = socket.gethostbyname(socket.gethostname())
-sock.setsockopt(socket.SOL_IP, socket.IP_MULTICAST_IF, socket.inet_aton(intf))
-sock.setsockopt(socket.SOL_IP, socket.IP_ADD_MEMBERSHIP, socket.inet_aton(UDP_IP) + socket.inet_aton(intf))
+#intf = socket.gethostbyname(socket.gethostname())
+#sock.setsockopt(socket.SOL_IP, socket.IP_MULTICAST_IF, socket.inet_aton(intf))
+#sock.setsockopt(socket.SOL_IP, socket.IP_ADD_MEMBERSHIP, socket.inet_aton(UDP_IP) + socket.inet_aton(intf))
 
-
+try:
 # Fish Tank Control
-default_data = [ 128, 128, 128, 1, 1, 1, 1, 1 , 0b11111111 ]
-register = pithon_i2c_registry.PithonI2cRegistry(9)
-register.set(default_data)
-update_register()
+    default_data = [ 128, 128, 128, 1, 1, 1, 1, 1 , 0b11111111 ]
+    register = pithon_i2c_registry.PithonI2cRegistry(9)
+    register.set(default_data)
+    update_register()
+    print("ATTiny found!")
+except IOError:
+    print("No ATTiny found!")
+
 
 ## Main loop ##
 while True:
     try:
         now = datetime.now()
         temp = getCPUtemperature()
-        temp_tank = temp_sensor.get_temperature()
+#        temp_tank = temp_sensor.get_temperature()
 
         # Heartbeat
         heartbeat.update()
@@ -212,11 +226,9 @@ while True:
     except IOError:
         pass
 
-    finally:  
-        gpio.cleanup()   # clean up GPIO on CTRL+C exit  
-        sock.setsockopt(socket.SOL_IP, socket.IP_DROP_MEMBERSHIP, socket.inet_aton(UDP_IP) + socket.inet_aton('0.0.0.0'))
-        sock.close()
-
-gpio.cleanup()           # clean up GPIO on normal exit  
-sock.setsockopt(socket.SOL_IP, socket.IP_DROP_MEMBERSHIP, socket.inet_aton(UDP_IP) + socket.inet_aton('0.0.0.0'))
-sock.close()
+#        sock.setsockopt(socket.SOL_IP, socket.IP_DROP_MEMBERSHIP, socket.inet_aton(UDP_IP) + socket.inet_aton('0.0.0.0'))
+#        sock.close()
+    except KeyboardInterrupt:
+        gpio.cleanup()           # clean up GPIO on normal exit  
+#sock.setsockopt(socket.SOL_IP, socket.IP_DROP_MEMBERSHIP, socket.inet_aton(UDP_IP) + socket.inet_aton('0.0.0.0'))
+#sock.close()
