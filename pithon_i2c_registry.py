@@ -4,7 +4,7 @@ class PithonI2cRegistry (object):
         self.changed = False
         for x in range(size):
             self._reg.append(0)
-        self._size = size
+        self._size = size 
 
     def set(self, new_data, ptr=None):
 #       self.changed = True 
