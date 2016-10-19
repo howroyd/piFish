@@ -15,13 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="piFishArduino.ino" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="__vm\.piFishArduino.vsarduino.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="arduino_i2c_registry.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="__vm\.piFish.vsarduino.h">
@@ -29,8 +23,8 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="arduino_i2c_registry.cpp">
+    <None Include="piFishSlave\piFishSlave.ino">
       <Filter>Source Files</Filter>
-    </ClCompile>
+    </None>
   </ItemGroup>
 </Project>
