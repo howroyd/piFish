@@ -14,4 +14,4 @@ echo "Done!"
 sudo shutdown -r now
 
 # add the following line to sudo crontab -e
-# 00 21 * * * /home/pi/update.sh
+# 00 21 * * * /home/pi/piFish/update.sh
