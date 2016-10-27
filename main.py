@@ -10,6 +10,7 @@ import sys
 from enum import Enum
 from w1thermsensor import W1ThermSensor
 import socket
+import crcmod
 
 address_nano = 0x69
 pin_gpio_arduino_reset = 20
@@ -29,11 +30,7 @@ class pin_arduino(Enum):
     green = 1
     blue = 2
     fan = 3
-    pump = 4
-    lights = 5
-    heater = 6
-    air = 7
-    status = 8
+    status = 4
 
 flag_lid_open = False
 
@@ -89,24 +86,27 @@ class Heartbeat(object):
                 self._time_last = now
                 self._val != self._val
         
-
 # Return CPU temperature as a character string                                      
 def getCPUtemperature():
     res = os.popen('vcgencmd measure_temp').readline()
     return(float(res.replace("temp=","").replace("'C\n","")))
 
-def update_register():
+def update_register(reg):
 #    with SMBus(1) as bus:
-        if register.changed:
-            data_out = register.get()
-            for x in range(7):
-#            bus.write_i2c_block_data(address_nano, 0xff, data_out)
-                out = [data_out[x] , data_out[8]]
-                bus.write_i2c_block_data(address_nano, x, out)
-                time.sleep(0.1)
+        if reg.changed:
+            crc = crcmod.Crc(0x11021, rev=False, initCrc=0x0000, xorOut=0x0000)
+            data_out = reg.get()
+            for x in range(reg.size):
+                crc.update(bytearray((reg.get(x-1))))
+            data_out.append(crc.crcValue)
+
+            bus.write_i2c_block_data(address_nano, data_out[0], data_out[1:])
+
+            time.sleep(0.1)
             print("Sent:", data_out) 
             time.sleep(0.1)
-            data_in = [None] * 9
+
+            data_in = [None] * reg.size
             for x in range(9):
 #            data_in = bus.read_i2c_block_data(address_nano, 0, 9)[:9]
                 data_in[x] = bus.read_byte_data(address_nano, x)
@@ -137,7 +137,7 @@ gpio.add_event_detect(pin_gpio_switch_lid, gpio.BOTH, callback=lid_open, bouncet
 #time.sleep(1) #TODO needed?
 
 bus = smbus.SMBus(1)
-#temp_sensor = W1ThermSensor()
+temp_sensor = W1ThermSensor()
 fan_controller = FanController()
 heartbeat = Heartbeat()
 
@@ -164,8 +164,8 @@ UDP_KEY = "385D23B0"
 
 try:
 # Fish Tank Control
-    default_data = [ 128, 128, 128, 1, 1, 1, 1, 1 , 0b11111111 ]
-    register = pithon_i2c_registry.PithonI2cRegistry(9)
+    default_data = [ 128, 128, 128, 255, 0b11111111 ]
+    register = pithon_i2c_registry.PithonI2cRegistry(5)
     register.set(default_data)
     update_register()
     print("ATTiny found!")
@@ -192,9 +192,9 @@ while True:
             register.set(0b11111111, pin_arduino.status.value)
             # Set main lights
             if now.hour >= time_lights_on and now.hour < time_lights_off:
-                register.set(1, pin_arduino.lights.value)
+                register.set(register.get(pin_arduino.status.value)|0b00000100, pin_arduino.status.value)
             else:
-                register.set(0, pin_arduino.lights.value)
+                register.set(register.get(pin_arduino.status.value)&0b11111011, pin_arduino.status.value)
 
             # Set LEDs
             if now.hour >= time_leds_on and now.hour < time_leds_off:
@@ -214,12 +214,7 @@ while True:
             fan_controller.update()
             register.set(fan_controller.get_state(), pin_arduino.fan.value)
 
-            # Ensure basic devices are on
-            register.set(1, pin_arduino.pump.value)
-            register.set(1, pin_arduino.heater.value)
-            register.set(1, pin_arduino.air.value)
-
-        update_register()
+        update_register(register)
 
         #time.sleep(2)
 
