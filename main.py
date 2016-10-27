@@ -92,30 +92,41 @@ def getCPUtemperature():
     return(float(res.replace("temp=","").replace("'C\n","")))
 
 def update_register(reg):
-#    with SMBus(1) as bus:
         if reg.changed:
-            crc = crcmod.Crc(0x11021, rev=False, initCrc=0x0000, xorOut=0x0000)
-            data_out = reg.get()
-            for x in range(reg.size):
-                crc.update(bytearray((reg.get(x-1))))
-            data_out.append(crc.crcValue)
 
-            bus.write_i2c_block_data(address_nano, data_out[0], data_out[1:])
-
+            bus.write_byte_data(address_nano, pin_arduino.red.value, reg.get(0))
             time.sleep(0.1)
-            print("Sent:", data_out) 
+            bus.write_byte_data(address_nano, pin_arduino.green.value, reg.get(1))
             time.sleep(0.1)
+            bus.write_byte_data(address_nano, pin_arduino.blue.value, reg.get(2))
+            time.sleep(0.1)
+            bus.write_byte_data(address_nano, pin_arduino.fan.value, reg.get(3))
+            time.sleep(0.1)
+            bus.write_byte_data(address_nano, 0xff, reg.get(4))
+            time.sleep(0.1)
+            
+            print("Sent:", [
+                reg.get(0),
+                reg.get(1),
+                reg.get(2),
+                reg.get(3),
+                reg.get(4)
+                ]) 
+#            print("Received:", bus.read_byte_data(address_nano, 0xff)) 
 
-            data_in = [None] * reg.size
-            for x in range(9):
-#            data_in = bus.read_i2c_block_data(address_nano, 0, 9)[:9]
+            data_in = [None] * 5
+            for x in range(4):
                 data_in[x] = bus.read_byte_data(address_nano, x)
                 time.sleep(0.1)
-            #data_in = dev.read(8)
-#        register.set(data)
-            #dev.close()
+            data_in[4] = bus.read_byte_data(address_nano, 0xff)
+
             print("Received:", data_in) 
-            if (data_out == data_in): 
+            if ( reg.get(0) == data_in[0] and
+                 reg.get(1) == data_in[1] and
+                 reg.get(2) == data_in[2] and
+                 reg.get(3) == data_in[3] and
+                 reg.get(4) == data_in[4]
+                ): 
                 register.changed = False
                 print("Ok!")
             else:
@@ -137,7 +148,7 @@ gpio.add_event_detect(pin_gpio_switch_lid, gpio.BOTH, callback=lid_open, bouncet
 #time.sleep(1) #TODO needed?
 
 bus = smbus.SMBus(1)
-temp_sensor = W1ThermSensor()
+#temp_sensor = W1ThermSensor()
 fan_controller = FanController()
 heartbeat = Heartbeat()
 
@@ -167,7 +178,7 @@ try:
     default_data = [ 128, 128, 128, 255, 0b11111111 ]
     register = pithon_i2c_registry.PithonI2cRegistry(5)
     register.set(default_data)
-    update_register()
+    update_register(register)
     print("ATTiny found!")
 except IOError:
     print("No ATTiny found!")
@@ -216,7 +227,7 @@ while True:
 
         update_register(register)
 
-        #time.sleep(2)
+        time.sleep(4)
 
     except IOError:
         pass
