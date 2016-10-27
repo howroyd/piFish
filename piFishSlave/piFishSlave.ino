@@ -1,15 +1,14 @@
 #include <Arduino.h>
-#include <Crc16.h>
 #include <RBD_Timer.h>
 #include <RBD_Light.h>
 
 #define VERSION  "2.1"
 #define I2C_SLAVE_ADDRESS 0x69
-#define I2C_PACKET_SIZE 6
+#define I2C_PACKET_SIZE 2
 
 #include <TinyWireS.h>
 #ifndef TWI_RX_BUFFER_SIZE
-#define TWI_RX_BUFFER_SIZE ( I2C_PACKET_SIZE )
+#define TWI_RX_BUFFER_SIZE ( 16 )
 #endif
 
 #define LED_HEARTBEAT 10
@@ -48,6 +47,7 @@ public:
 			}
 		}
 		else {
+			return;
 			if ((now - _time_last) > _period) {
 				this->blinky(_pin);
 				_time_last = now;
@@ -55,7 +55,10 @@ public:
 		}
 	}
 	void set_counter(const int number) {
-		_counter = number;
+		_counter = number * 2;
+	}
+	int get_counter() {
+		return _counter % 2 == 0 ? _counter / 2 : _counter + 1 / 2;
 	}
 	// Toggle an LED
 	static inline void blinky(const int pin) {
@@ -74,11 +77,9 @@ void update(void);
 Blinky blinky(LED_HEARTBEAT);
 
 volatile byte    statusRegister = 0b11111111; // Toggle on/off a bit for each pin on/off
-volatile byte    i2cReceiveRegister[I2C_PACKET_SIZE];
 volatile bool    newData;
 volatile uint8_t reg_ptr = 0;
-
-Crc16 crc;
+volatile byte    i2c_in;
 
 Pin red_p(8, true);
 Pin green_p(7, true);
@@ -107,11 +108,9 @@ void setup() {
 	TinyWireS.onReceive(receiveEvent);
 	TinyWireS.onRequest(requestEvent);
 
-	for (int x = 0; x < 3; x++) {
-		digitalWrite(lights_p.pin, false);
-		delay(500);
-		digitalWrite(lights_p.pin, true);
-		delay(500);
+	blinky.set_counter(3);
+	while (blinky.get_counter() > 0) {
+		blinky.update();
 	}
 }
 
@@ -140,7 +139,6 @@ void loop() {
 		last_ms = now;
 		if (newData) {
 			update();
-			blinky.set_counter(1);
 		}
 	}
 
@@ -166,53 +164,34 @@ void receiveEvent(const uint8_t howMany)
 	// Sanity check
 	if (howMany < 1 || howMany > TWI_RX_BUFFER_SIZE) return;
 
-	if (howMany == 1) {
-		reg_ptr = TinyWireS.receive();
-		return;
-	}
+	reg_ptr = TinyWireS.receive();
+	if (!TinyWireS.available()) return;
+	//if (reg_ptr == 0xff) blinky.set_counter(4);
+	//else blinky.set_counter(reg_ptr);
+	i2c_in = TinyWireS.receive();
 
-	crc.clearCrc();
-	for (int a = 1; a <= howMany; a++) {
-		if (a <= I2C_PACKET_SIZE) {
-			i2cReceiveRegister[a - 1] = TinyWireS.receive();
-			if (a <= (I2C_PACKET_SIZE - 1)) crc.updateCrc(i2cReceiveRegister[a - 1]);
-		}
-		else TinyWireS.receive();  // if we receive more data than allowed just throw it away
-	}
+	while (TinyWireS.available()) TinyWireS.receive();
 
-	if (crc.getCrc() == (unsigned short)i2cReceiveRegister[I2C_PACKET_SIZE - 1]) newData = true;
-	else blinky.set_counter(3);
+	newData = true;
 }
 
 void requestEvent(void)
 {
 	uint8_t data;
 	switch (reg_ptr) {
-	case 7:
+	case 0:
 		data = red.getBrightness();
 		break;
-	case 6:
+	case 1:
 		data = green.getBrightness();
 		break;
-	case 5:
+	case 2:
 		data = blue.getBrightness();
 		break;
-	case 4:
+	case 3:
 		data = fan.getBrightness();
 		break;
-	case 3:
-		data = fan_p.value;
-		break;
-	case 2:
-		data = lights_p.value;
-		break;
-	case 1:
-		data = heater_p.value;
-		break;
-	case 0:
-		data = air_p.value;
-		break;
-	default:
+	case 0xFF:
 		data = statusRegister;
 		break;
 	}
@@ -220,22 +199,32 @@ void requestEvent(void)
 }
 
 void update(void) {
-	uint8_t x = 0;
-	red.setBrightness(i2cReceiveRegister[x++]);
-	green.setBrightness(i2cReceiveRegister[x++]);
-	blue.setBrightness(i2cReceiveRegister[x++]);
-	fan.setBrightness(i2cReceiveRegister[x++]);
-
-	uint8_t status = i2cReceiveRegister[I2C_PACKET_SIZE - 2];
-	x = 7;
-	red_p.value = bitRead(status, x--);
-	green_p.value = bitRead(status, x--);
-	blue_p.value = bitRead(status, x--);
-	fan_p.value = bitRead(status, x--);
-	pump_p.value = bitRead(status, x--);
-	lights_p.value = bitRead(status, x--);
-	heater_p.value = bitRead(status, x--);
-	air_p.value = bitRead(status, x--);
+	switch (reg_ptr) {
+	case 0:
+		red.setBrightness(i2c_in);
+		break;
+	case 1:
+		green.setBrightness(i2c_in);
+		break;
+	case 2:
+		blue.setBrightness(i2c_in);
+		break;
+	case 3:
+		fan.setBrightness(i2c_in);
+		break;
+	case 0xFF:
+		statusRegister = i2c_in;
+		int x = 7;
+		red_p.value = bitRead(statusRegister, x--);
+		green_p.value = bitRead(statusRegister, x--);
+		blue_p.value = bitRead(statusRegister, x--);
+		fan_p.value = bitRead(statusRegister, x--);
+		pump_p.value = bitRead(statusRegister, x--);
+		lights_p.value = bitRead(statusRegister, x--);
+		heater_p.value = bitRead(statusRegister, x--);
+		air_p.value = bitRead(statusRegister, x--);
+		break;
+	}
 
 	newData = false;
 }
