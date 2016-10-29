@@ -10,7 +10,6 @@ import sys
 from enum import Enum
 from w1thermsensor import W1ThermSensor
 import socket
-import crcmod
 
 address_nano = 0x69
 pin_gpio_arduino_reset = 20
