@@ -9,6 +9,7 @@ Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
 		Release|x86 = Release|x86
+		Description = Arduino ATTiny84 slave code for the piFish controller
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{9B0D4CAA-CCD1-4493-95D3-50B45A3C97AA}.Debug|x86.ActiveCfg = Debug|Win32

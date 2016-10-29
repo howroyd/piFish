@@ -12,8 +12,7 @@
 #define _VSARDUINO_H_
 #define __AVR_ATtiny84__
 #define __AVR_ATTINY84__
-#define _VMDEBUG 1
-#define F_CPU 1000000L
+#define F_CPU 8000000L
 #define ARDUINO 106012
 #define ARDUINO_attiny
 #define ARDUINO_ARCH_AVR
