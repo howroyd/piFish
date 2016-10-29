@@ -18,8 +18,8 @@ pin_gpio_arduino_interrupt = 21
 pin_gpio_switch_lid = 16
 
 time_lights_on = 9
-time_lights_off = 21
-time_leds_on = 21
+time_lights_off = 20
+time_leds_on = 20
 time_leds_off = 23
 
 gpio.setwarnings(False)
@@ -29,8 +29,7 @@ class pin_arduino(Enum):
     red = 0
     green = 1
     blue = 2
-    fan = 3
-    status = 4
+    status = 3
 
 flag_lid_open = False
 
@@ -100,32 +99,28 @@ def update_register(reg):
             time.sleep(0.1)
             bus.write_byte_data(address_nano, pin_arduino.blue.value, reg.get(2))
             time.sleep(0.1)
-            bus.write_byte_data(address_nano, pin_arduino.fan.value, reg.get(3))
-            time.sleep(0.1)
-            bus.write_byte_data(address_nano, 0xff, reg.get(4))
+            bus.write_byte_data(address_nano, 0xff, reg.get(3))
             time.sleep(0.1)
             
             print("Sent:", [
                 reg.get(0),
                 reg.get(1),
                 reg.get(2),
-                reg.get(3),
-                reg.get(4)
+                reg.get(3)
                 ]) 
 #            print("Received:", bus.read_byte_data(address_nano, 0xff)) 
 
-            data_in = [None] * 5
+            data_in = [None] * 4
             for x in range(4):
                 data_in[x] = bus.read_byte_data(address_nano, x)
                 time.sleep(0.1)
-            data_in[4] = bus.read_byte_data(address_nano, 0xff)
+            data_in[3] = bus.read_byte_data(address_nano, 0xff)
 
             print("Received:", data_in) 
             if ( reg.get(0) == data_in[0] and
                  reg.get(1) == data_in[1] and
                  reg.get(2) == data_in[2] and
-                 reg.get(3) == data_in[3] and
-                 reg.get(4) == data_in[4]
+                 reg.get(3) == data_in[3]
                 ): 
                 register.changed = False
                 print("Ok!")
@@ -175,8 +170,8 @@ UDP_KEY = "385D23B0"
 
 try:
 # Fish Tank Control
-    default_data = [ 128, 128, 128, 255, 0b11111111 ]
-    register = pithon_i2c_registry.PithonI2cRegistry(5)
+    default_data = [ 128, 128, 128, 0b11111111 ]
+    register = pithon_i2c_registry.PithonI2cRegistry(4)
     register.set(default_data)
     update_register(register)
     print("ATTiny found!")
@@ -196,34 +191,34 @@ while True:
         gpio.output(pin_gpio_arduino_interrupt, heartbeat.get())
 
         # Disable all bar dim red led if lid is open
-        if flag_lid_open:
-            register.set(0b10000000, pin_arduino.status.value)
-            register.set(100, pin_arduino.red.value)
-        else:
-            register.set(0b11111111, pin_arduino.status.value)
+#        if flag_lid_open:
+#            register.set(0b10000000, pin_arduino.status.value)
+#            register.set(100, pin_arduino.red.value)
+#        else:
+#            register.set(0b11111111, pin_arduino.status.value)
             # Set main lights
-            if now.hour >= time_lights_on and now.hour < time_lights_off:
-                register.set(register.get(pin_arduino.status.value)|0b00000100, pin_arduino.status.value)
-            else:
-                register.set(register.get(pin_arduino.status.value)&0b11111011, pin_arduino.status.value)
+        if now.hour >= time_lights_on and now.hour < time_lights_off:
+             register.set(0b11111111, pin_arduino.status.value)
+        else:
+             register.set(0b11111011, pin_arduino.status.value)
 
             # Set LEDs
-            if now.hour >= time_leds_on and now.hour < time_leds_off:
-                register.set(255, pin_arduino.red.value)
-                register.set(255, pin_arduino.green.value)
-                register.set(255, pin_arduino.blue.value)
-            else:
-                register.set(0, pin_arduino.red.value)
-                register.set(0, pin_arduino.green.value)
-                register.set(0, pin_arduino.blue.value)
+        if now.hour >= time_leds_on and now.hour < time_leds_off:
+             register.set(255, pin_arduino.red.value)
+             register.set(255, pin_arduino.green.value)
+             register.set(255, pin_arduino.blue.value)
+        else:
+             register.set(0, pin_arduino.red.value)
+             register.set(0, pin_arduino.green.value)
+             register.set(0, pin_arduino.blue.value)
     
-            # Set cooling fan with debounce
-            if (getCPUtemperature() > 50.0):
-                fan_controller.set_state(True)
-            else:
-                fan_controller.set_state(False)
-            fan_controller.update()
-            register.set(fan_controller.get_state(), pin_arduino.fan.value)
+        # Set cooling fan with debounce
+        if (getCPUtemperature() > 50.0):
+            fan_controller.set_state(True)
+        else:
+            fan_controller.set_state(False)
+        fan_controller.update()
+        #register.set(fan_controller.get_state(), pin_arduino.fan.value)
 
         update_register(register)
 
