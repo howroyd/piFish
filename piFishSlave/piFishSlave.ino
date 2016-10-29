@@ -2,31 +2,32 @@
 #include <RBD_Timer.h>
 #include <RBD_Light.h>
 #include <TinyWireS.h>
+#include "TimedLoops.h"
+#include "I2cHandler.h"
 
 #define VERSION  "2.1"
-#define I2C_SLAVE_ADDRESS 0x69
-#define I2C_PACKET_SIZE 4
-#define LED_HEARTBEAT 10
 
 // ATTiny84 pin definitions
-// PB0 10
-// PB1 9
-// PB2 8
-// PA7 7
-// PA5 5
-// PA3 3
-// PA2 2
-// PA1 1
-// PA0 0
+#define PB0 10
+#define PB1 9
+#define PB2 8
+#define PA7 7
+#define PA5 5
+#define PA3 3
+#define PA2 2
+#define PA1 1
+#define PA0 0
 
 class Pin {
 public:
-	Pin(const uint8_t pin, const bool value) {
+	Pin(const uint8_t pin, const bool value, const uint8_t bit) {
 		this->pin = pin;
 		this->value = value;
+		this->bit = bit;
 	}
 	bool value;
 	uint8_t pin;
+	uint8_t bit;
 };
 
 class Blinky {
@@ -75,180 +76,86 @@ private:
 	unsigned long _time_last;
 	unsigned long _period;
 	volatile int  _counter;
-};
+} blinky(PB0);
 
-void receiveEvent(const uint8_t);
-void requestEvent(void);
+I2cHandler i2c_handler(&TinyWireS);
+TimedLoops fast_loop(10);
+TimedLoops medium_loop(100);
+TimedLoops slow_loop(4000);
+
 void update(void);
-Blinky blinky(LED_HEARTBEAT);
+void toggle_outputs(void);
 
-volatile byte    statusRegister = 0b11111111; // Toggle on/off a bit for each pin on/off
-volatile bool    newData;
-volatile uint8_t reg_ptr = 0;
-volatile byte    i2c_in;
+byte statusRegister = 0b11111111; // Toggle on/off a bit for each pin on/off
 
-Pin pump_p(0, true);
-Pin lights_p(1, true);
-Pin heater_p(2, true);
-Pin air_p(3, true);
-Pin red_p(8, true);
-Pin green_p(7, true);
-Pin blue_p(5, true);
-Pin fan_p(9, true);
+Pin* pin_array[] = { new Pin(PA0, true, 3),
+						new Pin(PA1, true, 2),
+						new Pin(PA2, true, 1),
+						new Pin(PA3, true, 0),
+						new Pin(PB2, true, 7),
+						new Pin(PA7, true, 6),
+						new Pin(PA5, true, 5),
+						new Pin(PB1, true, 4)};
 
-RBD::Light red(red_p.pin);
-RBD::Light green(green_p.pin);
-RBD::Light blue(blue_p.pin);
+RBD::Light* led_array[] = { new RBD::Light(pin_array[7]->pin),
+								new RBD::Light(pin_array[6]->pin),
+								new RBD::Light(pin_array[5]->pin)};
 
 // MAIN SETUP //
 void setup() {
 	// Initialise the heartbead LED
 	blinky.init();
 
+	// Add functions to loop handler
+	fast_loop.add_function((func_t)&blinky.update);
+	for (uint8_t x=0 ; x < 3 ; x++) fast_loop.add_function((func_t)&led_array[x]->update);
+	fast_loop.add_function((func_t)&TinyWireS_stop_check);
+	medium_loop.add_function((func_t)&update);
+	slow_loop.add_function((func_t)&toggle_outputs);
+
 	// Setup output pins
-	pinMode(pump_p.pin, OUTPUT);
-	pinMode(lights_p.pin, OUTPUT);
-	pinMode(heater_p.pin, OUTPUT);
-	pinMode(air_p.pin, OUTPUT);
-	pinMode(red_p.pin, OUTPUT);
-	pinMode(green_p.pin, OUTPUT);
-	pinMode(blue_p.pin, OUTPUT);
-	pinMode(fan_p.pin, OUTPUT);
+	for (uint8_t x = 0; x < 8; x++) pinMode(pin_array[x]->pin, OUTPUT);
 
 	// Start the I2C slave
-	TinyWireS.begin(I2C_SLAVE_ADDRESS);
-	TinyWireS.onReceive(receiveEvent);
-	TinyWireS.onRequest(requestEvent);
+	i2c_handler.init();
 
 	// Flash the heartbeat 3 times to indicate setup is finished
 	blinky.set_counter(3);
-	while (blinky.get_counter() > 0) {
-		blinky.update();
-	}
+	while (blinky.get_counter() > 0) blinky.update();
+	
 	delay(2000);
 }
 
 // MAIN LOOP //
 void loop() {
-	high_speed_loop();
-	medium_speed_loop();
-	low_speed_loop();
-	TinyWireS_stop_check();
-}
-
-// Fast loop
-void high_speed_loop(void) {
-	static unsigned long time_last;
-	unsigned long time_now = millis();
-	if ((time_now - time_last) < 10) return;
-	// Blink the onboard LED
-	blinky.update();
-
-	// Update RGB
-	red.update();
-	green.update();
-	blue.update();
-	
-	time_last = millis();
-}
-
-// Medium loop
-void medium_speed_loop(void) {
-	static unsigned long time_last;
-	unsigned long time_now = millis();
-	if ((time_now - time_last) < 100) return;
-	if (newData) {
-		update();
-	}
-
-	time_last = millis();
-}
-
-// Slow loop
-void low_speed_loop(void) {
-	static unsigned long time_last;
-	unsigned long time_now = millis();
-
-	if ((time_now - time_last) < 4000) return;
-
-	if (!red_p.value)   red.off();
-	if (!green_p.value) green.off();
-	if (!blue_p.value)  blue.off();
-	digitalWrite(fan_p.pin, fan_p.value);
-	digitalWrite(pump_p.pin, pump_p.value);
-	digitalWrite(lights_p.pin, lights_p.value);
-	digitalWrite(heater_p.pin, heater_p.value);
-	digitalWrite(air_p.pin, air_p.value);
-
-	blinky.set_counter(1);
-
-	time_last = millis();
-}
-
-// Incoming I2C data
-void receiveEvent(const uint8_t howMany)
-{
-	// Sanity check
-	if (howMany < 1 || howMany > I2C_PACKET_SIZE) return;
-
-	reg_ptr = TinyWireS.receive();
-
-	if (!TinyWireS.available()) return;
-
-	i2c_in = TinyWireS.receive();
-
-	while (TinyWireS.available()) TinyWireS.receive();
-
-	newData = true;
-}
-
-// I2C data request
-void requestEvent(void) {
-	uint8_t data;
-
-	switch (reg_ptr) {
-	case 0:
-		data = red.getBrightness();
-		break;
-	case 1:
-		data = green.getBrightness();
-		break;
-	case 2:
-		data = blue.getBrightness();
-		break;
-	case 0xFF:
-		data = statusRegister;
-		break;
-	}
-
-	TinyWireS.send(data);
+	slow_loop.run();
+	medium_loop.run();
+	fast_loop.run();
 }
 
 // Update internal registry
 void update(void) {
-	switch (reg_ptr) {
+	if (!i2c_handler.new_data) return;
+
+	switch (i2c_handler.ptr) {
 	case 0:
-		red.setBrightness(i2c_in);
-		break;
 	case 1:
-		green.setBrightness(i2c_in);
-		break;
 	case 2:
-		blue.setBrightness(i2c_in);
+		led_array[i2c_handler.ptr]->setBrightness(i2c_handler._inbuf[0]);
+		i2c_handler._outbuf[i2c_handler.ptr] = led_array[i2c_handler.ptr]->getBrightness();
 		break;
 	case 0xFF:
-		statusRegister = i2c_in;
-		int x = 7;
-		red_p.value = bitRead(statusRegister, x--);
-		green_p.value = bitRead(statusRegister, x--);
-		blue_p.value = bitRead(statusRegister, x--);
-		fan_p.value = bitRead(statusRegister, x--);
-		pump_p.value = bitRead(statusRegister, x--);
-		lights_p.value = bitRead(statusRegister, x--);
-		heater_p.value = bitRead(statusRegister, x--);
-		air_p.value = bitRead(statusRegister, x--);
+		statusRegister = i2c_handler._inbuf[0];
+		i2c_handler._outbuf[i2c_handler.ptr] = statusRegister;
 		break;
 	}
 	blinky.set_counter(3);
-	newData = false;
+	i2c_handler.new_data = false;
+}
+
+void toggle_outputs(void) {
+	for (uint8_t x = 0 ; x < 3 ; x++) if (!bitRead(statusRegister, pin_array[7 - x]->bit)) led_array[x]->off();
+	for (uint8_t x = 4 ; x >= 0 ; x--) digitalWrite(pin_array[x]->pin, bitRead(statusRegister, pin_array[x]->bit));
+
+	blinky.set_counter(1);
 }
