@@ -93,16 +93,35 @@ Pin air_p(3, true);
 RBD::Light red(red_p.pin);
 RBD::Light green(green_p.pin);
 RBD::Light blue(blue_p.pin);
-RBD::Light fan(fan_p.pin);
+
+// Blinky test(3, 3000);
+// PB0 10
+// PB1 9
+// PB2 8
+// PA7 7
+// PA5 5
+// PA3 3
+// PA2 2
+// PA1 1
+// PA0 0
 
 
 void setup() {
-	blinky.init();
 
+	//  test.init();
+	//
+	//  test.set_counter(255);
+	//  while (true) test.update();
+
+	blinky.init();
 	pinMode(pump_p.pin, OUTPUT);
 	pinMode(lights_p.pin, OUTPUT);
 	pinMode(heater_p.pin, OUTPUT);
 	pinMode(air_p.pin, OUTPUT);
+	pinMode(red_p.pin, OUTPUT);
+	pinMode(green_p.pin, OUTPUT);
+	pinMode(blue_p.pin, OUTPUT);
+	pinMode(fan_p.pin, OUTPUT);
 
 	TinyWireS.begin(I2C_SLAVE_ADDRESS);
 	TinyWireS.onReceive(receiveEvent);
@@ -112,6 +131,8 @@ void setup() {
 	while (blinky.get_counter() > 0) {
 		blinky.update();
 	}
+
+
 }
 
 void loop() {
@@ -131,7 +152,6 @@ void loop() {
 		red.update();
 		green.update();
 		blue.update();
-		fan.update();
 	}
 
 	// Medium speed loop //
@@ -143,17 +163,18 @@ void loop() {
 	}
 
 	// Low speed loop //
-	if ((now - last_ls) > 1000) {
+	if ((now - last_ls) > 4000) {
 		last_ls = now;
 
 		if (!red_p.value)   red.off();
 		if (!green_p.value) green.off();
 		if (!blue_p.value)  blue.off();
-		if (!fan_p.value)   fan.off();
+		digitalWrite(fan_p.pin, fan_p.value);
 		digitalWrite(pump_p.pin, pump_p.value);
 		digitalWrite(lights_p.pin, lights_p.value);
 		digitalWrite(heater_p.pin, heater_p.value);
 		digitalWrite(air_p.pin, air_p.value);
+
 	}
 
 	TinyWireS_stop_check();
@@ -188,9 +209,6 @@ void requestEvent(void)
 	case 2:
 		data = blue.getBrightness();
 		break;
-	case 3:
-		data = fan.getBrightness();
-		break;
 	case 0xFF:
 		data = statusRegister;
 		break;
@@ -208,9 +226,6 @@ void update(void) {
 		break;
 	case 2:
 		blue.setBrightness(i2c_in);
-		break;
-	case 3:
-		fan.setBrightness(i2c_in);
 		break;
 	case 0xFF:
 		statusRegister = i2c_in;
