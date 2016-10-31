@@ -16,10 +16,13 @@ pin_gpio_arduino_reset = 20
 pin_gpio_arduino_interrupt = 21
 pin_gpio_switch_lid = 16
 
-time_lights_on = 9
-time_lights_off = 20
-time_leds_on = 20
-time_leds_off = 23
+myvar = 1
+
+time_lights = [[9, 19]]
+time_leds   = [[8, 9, 255, 255, 255],
+              [19, 20, 255, 255, 255],
+              [20, 21, 255, 0, 0],
+              [21, 22, 128, 0, 0]]
 
 gpio.setwarnings(False)
 gpio.setmode(gpio.BCM)
@@ -196,20 +199,40 @@ while True:
 #        else:
 #            register.set(0b11111111, pin_arduino.status.value)
             # Set main lights
-        if now.hour >= time_lights_on and now.hour < time_lights_off:
-             register.set(0b11111111, pin_arduino.status.value)
-        else:
-             register.set(0b11111011, pin_arduino.status.value)
+        lights_set = False
+        for x in time_lights:
+             if now.hour >= x[0] and now.hour < x[1]:
+                 register.set(0b11111111, pin_arduino.status.value)
+                 lights_set = True
+        if not lights_set:
+                 register.set(0b11111011, pin_arduino.status.value)
 
             # Set LEDs
-        if now.hour >= time_leds_on and now.hour < time_leds_off:
-             register.set(255, pin_arduino.red.value)
-             register.set(255, pin_arduino.green.value)
-             register.set(255, pin_arduino.blue.value)
-        else:
+        leds_set = False
+        for x in time_leds:
+            if now.hour >= x[0] and now.hour < x[1]:
+                 register.set(x[2], pin_arduino.red.value)
+                 register.set(x[3], pin_arduino.green.value)
+                 register.set(x[4], pin_arduino.blue.value)
+  #               register.set(x[2] if myvar==1 else 0, pin_arduino.red.value)
+ #                register.set(x[3] if myvar==2 else 0, pin_arduino.green.value)
+#                 register.set(x[4] if myvar==3 else 0, pin_arduino.blue.value)
+                 leds_set = True
+                 print(x[2],x[3],x[4])
+                 myvar = 1 if myvar==3 else myvar+1
+        if not leds_set:
              register.set(0, pin_arduino.red.value)
              register.set(0, pin_arduino.green.value)
              register.set(0, pin_arduino.blue.value)
+             
+#        if now.hour >= time_leds_on and now.hour < time_leds_off:
+#             register.set(255, pin_arduino.red.value)
+#             register.set(255, pin_arduino.green.value)
+#             register.set(255, pin_arduino.blue.value)
+#        else:
+#             register.set(0, pin_arduino.red.value)
+#             register.set(0, pin_arduino.green.value)
+#             register.set(0, pin_arduino.blue.value)
     
         # Set cooling fan with debounce
         if (getCPUtemperature() > 50.0):
